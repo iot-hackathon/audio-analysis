@@ -16,7 +16,6 @@ import configparser
 
 import numpy as np
 import math
-from matplotlib.mlab import find
 
 #Logging
 logging.basicConfig(filename='output.log',level=logging.DEBUG,format='%(asctime)s %(module)s %(thread)s %(message)s')
@@ -82,8 +81,8 @@ def push_data(client, data, pitch):
 def find_pitch(signal, rate):
     signal = np.fromstring(signal, 'Int16');
     crossing = [math.copysign(1.0, s) for s in signal]
-    index = find(np.diff(crossing));
-    f0=round(len(index) * rate / (2 * np.prod(len(signal))))
+    index = np.count_nonzero(np.diff(crossing));
+    f0=round(index * rate / (2 * np.prod(len(signal))))
     return f0;
 
 if __name__ == "__main__":
