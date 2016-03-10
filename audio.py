@@ -2,8 +2,6 @@
 
 # http://stackoverflow.com/questions/26478315/getting-volume-levels-from-pyaudio-for-use-in-arduino
 
-from __future__ import print_function
-
 #For Audio analysis
 import pyaudio
 import wave
@@ -12,7 +10,7 @@ import signal
 import sys
 
 #Iot service dependencies
-import os,json,math,time,logging
+import os, json, math, time, logging
 import ibmiotf.device
 import configparser
 
@@ -27,14 +25,13 @@ def readConfig(cfg):
     opts = ibmiotf.device.ParseConfigFile(cfg)
     return opts
 
-
 CHUNK = 1024
 FORMAT = pyaudio.paInt16
 CHANNELS = 2
 RATE = 44100
 
-INPUT_BLOCK_TIME = 0.05
-INPUT_FRAMES_PER_BLOCK = int(RATE * INPUT_BLOCK_TIME)
+# INPUT_BLOCK_TIME = 0.05
+# INPUT_FRAMES_PER_BLOCK = int(RATE * INPUT_BLOCK_TIME)
 
 def find_input_device(pa):
     device_index = None
@@ -58,7 +55,7 @@ def signal_handler(signal, frame):
     print('You pressed Ctrl+C!')
     sys.exit(0)
 
-def listen():
+def get_stream():
     device_index = find_input_device(pa)
 
     stream = pa.open(
@@ -72,7 +69,7 @@ def listen():
 
     return stream
 
-def initialize():
+def get_client():
     try:
         options = readConfig(cfg)
         if options is None:
@@ -83,29 +80,32 @@ def initialize():
                 "auth-key": vcap["iotf-service"][0]["credentials"]["apiKey"],
                 "auth-token": vcap["iotf-service"][0]["credentials"]["apiToken"]
             }
-        cli = ibmiotf.device.Client(options)
-        cli.connect()
-        return cli
+        client = ibmiotf.device.Client(options)
+        logger.info("Client aquired")
+        client.connect()
+        return client
     except ibmiotf.ConnectionException as e:
         print(e)
 
-def pushData(result):
-    jsondata = {"Microphone" : { "stream" : str(result) }}
-    client=initialize()
-    client.publishEvent("status","json",jsondata)
+def push_data(client, data):
+    jsondata = {"Microphone" : { "stream" : str(data) }}
+    # client = get_client()
+    client.publishEvent("status", "json", jsondata)
 
 if __name__ == "__main__":
     pa = pyaudio.PyAudio()
-    streamCollected = listen()
+    client = get_client()
+    stream = get_stream()
 
     signal.signal(signal.SIGINT, signal_handler)
 
     while True:
         try:
-            data = streamCollected.read(CHUNK)
+            data = stream.read(CHUNK)
             rms  = audioop.rms(data, 2)
             if rms > 5000:
-                pushData(rms)
+                print rms
+                push_data(client, rms)
         except IOError as e:
             print( "Error recording: %s" % (e) )
             break
