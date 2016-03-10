@@ -4,5 +4,5 @@
 ```
 brew install portaudio
 sudo brew link portaudio
-pip install pyaudio
+pip install pyaudio configparser ibmiotf
 ```
