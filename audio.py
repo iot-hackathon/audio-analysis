@@ -66,12 +66,12 @@ def find_input_device(pa):
         devinfo = pa.get_device_info_by_index(i)
         print( "Found device %d: %s" % (i, devinfo["name"]) )
 
-        # for keyword in ["usb"]:
-        #     if keyword in devinfo["name"].lower():
-        #         print( "Matching device: %d - %s"%(i,devinfo["name"]) )
-        #         device_index = i
-        #     if device_index != None:
-        #         return device_index
+        for keyword in ["usb"]:
+            if keyword in devinfo["name"].lower():
+                print( "Matching device: %d - %s"%(i,devinfo["name"]) )
+                device_index = i
+            if device_index != None:
+                return device_index
 
     if device_index == None:
         print( "No preferred input found; using default input device." )
@@ -85,7 +85,6 @@ def signal_handler(signal, frame):
     sys.exit(0)
 
 def listen(id):
-    device_index = find_input_device(pa)
     stream = pa.open(
         format             = FORMAT,
         channels           = CHANNELS,
@@ -122,6 +121,7 @@ if __name__ == "__main__":
     pa = pyaudio.PyAudio()
     client=initialize()
     signal.signal(signal.SIGINT, signal_handler)
+    device_index = find_input_device(pa)
     for i in range(4):
         t.append(Worker("Thread", i))
         t[i].start()
