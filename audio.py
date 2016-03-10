@@ -4,11 +4,29 @@
 
 from __future__ import print_function
 
+#For Audio analysis
 import pyaudio
 import wave
 import audioop
 import signal
 import sys
+
+#Iot service dependencies
+import os,json,math,time,logging
+import ibmiotf.device
+import configparser
+
+#Logging
+logging.basicConfig(filename='output.log',level=logging.DEBUG,format='%(asctime)s %(module)s %(thread)s %(message)s')
+logger = logging.getLogger(__name__)
+
+#Config file for the IOT service
+cfg = './config.cfg'
+def readConfig(cfg):
+    logger.info('readConfig()...')
+    opts = ibmiotf.device.ParseConfigFile(cfg)
+    return opts
+
 
 CHUNK = 1024
 FORMAT = pyaudio.paInt16
@@ -24,7 +42,7 @@ def find_input_device(pa):
         devinfo = pa.get_device_info_by_index(i)
         print( "Found device %d: %s" % (i, devinfo["name"]) )
 
-        for keyword in ["mic", "input"]:
+        for keyword in ["headset"]:
             if keyword in devinfo["name"].lower():
                 print( "Matching device: %d - %s"%(i,devinfo["name"]) )
                 device_index = i
@@ -40,22 +58,7 @@ def signal_handler(signal, frame):
     print('You pressed Ctrl+C!')
     sys.exit(0)
 
-# http://stackoverflow.com/questions/6169217/replace-console-output-in-python
-def drawBar(title, value=0, maxValue=100, end=False):
-    width = 200
-    l = int(value * width // maxValue)
-    if l > width:
-        l = width
-    r = width - l;
-
-    sys.stdout.write(title + ": [" + ("#"*l) + ("-"*r) + "]\r")
-    if end:
-        sys.stdout.write("\n")
-    sys.stdout.flush()
-
-if __name__ == "__main__":
-    pa = pyaudio.PyAudio()
-
+def listen():
     device_index = find_input_device(pa)
 
     stream = pa.open(
@@ -67,14 +70,42 @@ if __name__ == "__main__":
         frames_per_buffer  = CHUNK
     )
 
+    return stream
+
+def initialize():
+    try:
+        options = readConfig(cfg)
+        if options is None:
+            options = {
+                "org": vcap["iotf-service"][0]["credentials"]["org"],
+                "id": vcap["iotf-service"][0]["credentials"]["iotCredentialsIdentifier"],
+                "auth-method": "apikey",
+                "auth-key": vcap["iotf-service"][0]["credentials"]["apiKey"],
+                "auth-token": vcap["iotf-service"][0]["credentials"]["apiToken"]
+            }
+        cli = ibmiotf.device.Client(options)
+        cli.connect()
+        return cli
+    except ibmiotf.ConnectionException as e:
+        print(e)
+
+def pushData(result):
+    jsondata = {"Microphone" : { "stream" : str(result) }}
+    client=initialize()
+    client.publishEvent("status","json",jsondata)
+
+if __name__ == "__main__":
+    pa = pyaudio.PyAudio()
+    streamCollected = listen()
 
     signal.signal(signal.SIGINT, signal_handler)
 
     while True:
         try:
-            data = stream.read(CHUNK)
+            data = streamCollected.read(CHUNK)
             rms  = audioop.rms(data, 2)
-            drawBar("Volume", rms, 10000)
+            if rms > 5000:
+                pushData(rms)
         except IOError as e:
             print( "Error recording: %s" % (e) )
             break
