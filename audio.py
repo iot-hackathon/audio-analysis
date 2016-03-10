@@ -14,56 +14,44 @@ import os, json, math, time, logging
 import ibmiotf.device
 import configparser
 
+import numpy as np
+import math
+from matplotlib.mlab import find
+
 #Logging
 logging.basicConfig(filename='output.log',level=logging.DEBUG,format='%(asctime)s %(module)s %(thread)s %(message)s')
 logger = logging.getLogger(__name__)
 
 #Config file for the IOT service
-cfg = './config.cfg'
+CFG = './config.cfg'
+DEVICE_CFG = './config.json'
+CHUNK = 1024
+FORMAT = pyaudio.paInt16
+# INPUT_BLOCK_TIME = 0.05
+# CHUNK = int(RATE * INPUT_BLOCK_TIME)
+
 def readConfig(cfg):
     logger.info('readConfig()...')
     opts = ibmiotf.device.ParseConfigFile(cfg)
     return opts
 
-CHUNK = 1024
-FORMAT = pyaudio.paInt16
-CHANNELS = 2
-RATE = 44100
-
-# INPUT_BLOCK_TIME = 0.05
-# INPUT_FRAMES_PER_BLOCK = int(RATE * INPUT_BLOCK_TIME)
-
-def find_input_device(pa):
-    device_index = None
-    for i in range( pa.get_device_count() ):
-        devinfo = pa.get_device_info_by_index(i)
-        print( "Found device %d: %s" % (i, devinfo["name"]) )
-
-        for keyword in ["headset"]:
-            if keyword in devinfo["name"].lower():
-                print( "Matching device: %d - %s"%(i,devinfo["name"]) )
-                device_index = i
-            if device_index != None:
-                return device_index
-
-    if device_index == None:
-        print( "No preferred input found; using default input device." )
-
-    return device_index
+def read_device_config():
+    config = []
+    with open(DEVICE_CFG, 'r') as f:
+        config = json.load(f)
+    return config
 
 def signal_handler(signal, frame):
     print('You pressed Ctrl+C!')
     sys.exit(0)
 
-def get_stream():
-    device_index = find_input_device(pa)
-
+def get_stream(cfg):
     stream = pa.open(
         format             = FORMAT,
-        channels           = CHANNELS,
-        rate               = RATE,
+        channels           = int(cfg["channels"]),
+        rate               = int(cfg["rate"]),
         input              = True,
-        input_device_index = device_index,
+        input_device_index = int(cfg["index"]),
         frames_per_buffer  = CHUNK
     )
 
@@ -71,7 +59,7 @@ def get_stream():
 
 def get_client():
     try:
-        options = readConfig(cfg)
+        options = readConfig(CFG)
         if options is None:
             options = {
                 "org": vcap["iotf-service"][0]["credentials"]["org"],
@@ -87,15 +75,27 @@ def get_client():
     except ibmiotf.ConnectionException as e:
         print(e)
 
-def push_data(client, data):
-    jsondata = {"Microphone" : { "stream" : str(data) }}
-    # client = get_client()
+def push_data(client, data, pitch):
+    jsondata = {"Microphone" : { "stream" : str(data), "pitch": pitch }}
     client.publishEvent("status", "json", jsondata)
+
+def find_pitch(signal, rate):
+    signal = np.fromstring(signal, 'Int16');
+    crossing = [math.copysign(1.0, s) for s in signal]
+    index = find(np.diff(crossing));
+    f0=round(len(index) * rate / (2 * np.prod(len(signal))))
+    return f0;
 
 if __name__ == "__main__":
     pa = pyaudio.PyAudio()
+
+    devices = read_device_config()
+
+    device = devices[0]
+    print ("Using device: %s" % device["name"])
+
     client = get_client()
-    stream = get_stream()
+    stream = get_stream(device)
 
     signal.signal(signal.SIGINT, signal_handler)
 
@@ -103,9 +103,11 @@ if __name__ == "__main__":
         try:
             data = stream.read(CHUNK)
             rms  = audioop.rms(data, 2)
+            pitch = find_pitch(data, device["rate"])
             if rms > 5000:
-                print rms
-                push_data(client, rms)
+                print("RMS: %d" % rms)
+                print("Pitch: %d" % pitch)
+                push_data(client, rms, pitch)
         except IOError as e:
             print( "Error recording: %s" % (e) )
             break
