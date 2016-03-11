@@ -10,6 +10,7 @@ import signal
 import sys
 import time
 import threading
+# import multiprocessing
 import struct
 
 # IoT service dependencies
@@ -21,6 +22,7 @@ import configparser
 
 # Math
 import numpy as np
+import scipy.fftpack as sf
 import math
 
 # Logging
@@ -162,6 +164,29 @@ def find_pitch(signal, rate):
     index = np.count_nonzero(np.diff(crossing));
     f0=round(index * rate / (2 * np.prod(len(signal))))
     return f0;
+
+def max_frequency(data, F_sample, Low_cutoff=200, High_cutoff= 10000):
+    """ Searching presence of frequencies on a real signal using FFT
+    Inputs
+    =======
+    X: 1-D numpy array, the real time domain audio signal (single channel time series)
+    Low_cutoff: float, frequency components below this frequency will not pass the filter (physical frequency in unit of Hz)
+    High_cutoff: float, frequency components above this frequency will not pass the filter (physical frequency in unit of Hz)
+    F_sample: float, the sampling frequency of the signal (physical frequency in unit of Hz)
+    """
+
+    X = np.array(struct.unpack( "%dh"%(len(data)/2) , data ))
+
+    M = X.size # let M be the length of the time series
+    Spectrum = sf.rfft(X, n=M)
+    [Low_cutoff, High_cutoff, F_sample] = map(float, [Low_cutoff, High_cutoff, F_sample])
+
+    #Convert cutoff frequencies into points on spectrum
+    [Low_point, High_point] = map(lambda F: F/F_sample * M, [Low_cutoff, High_cutoff])
+
+    maximumFrequency = np.where(Spectrum == np.max(Spectrum[Low_point : High_point])) # Calculating which frequency has max power.
+
+    return maximumFrequency
 
 def separator():
     global killswitch
