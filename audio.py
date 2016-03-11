@@ -32,6 +32,7 @@ DEVICE_CFG = './config.json'
 CHUNK = 1024
 FORMAT = pyaudio.paInt16
 RMS_THRESHOLD = 5000
+PITCH_THRESHOLD = 900
 # INPUT_BLOCK_TIME = 0.05
 # CHUNK = int(RATE * INPUT_BLOCK_TIME)
 
@@ -64,7 +65,7 @@ class Worker(threading.Thread):
                 data = stream.read(CHUNK)
                 rms  = audioop.rms(data, 2)
                 pitch = find_pitch(data, self.myDev["rate"])
-                if rms > RMS_THRESHOLD:
+                if rms > RMS_THRESHOLD and pitch > PITCH_THRESHOLD:
                     print("\nName: %s" % self.myName)
                     print("RMS: %d" % rms)
                     print("Pitch: %d" % pitch)
