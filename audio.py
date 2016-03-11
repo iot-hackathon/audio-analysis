@@ -80,7 +80,8 @@ class Worker(threading.Thread):
                         print("Pitch: %d" % pitch)
                         print("TS: %s" % (timestamp % 1000))
                         # print("Pitch2: %d" % pitch2)
-                    push_data_to_server(client, rms, pitch, timestamp, self.myName)
+                        hit_add(rms, pitch, timestamp, self.myName)
+                    # push_data_to_server(client, rms, pitch, timestamp, self.myName)
             except IOError as e:
                 print( "Error recording: %s" % (e) )
                 killswitch = True
@@ -123,6 +124,30 @@ def get_client():
     except ibmiotf.ConnectionException as e:
         print(e)
 
+hits = []
+hits_mtx = threading.Lock()
+def hit_add(volume, pitch, timestamp, id):
+    with hits_mtx:
+        hits.append({"volume": volume, "pitch": pitch, "ts": timestamp, "id": id})
+
+def hits_processor():
+    global killswitch
+    while not killswitch:
+        time.sleep(0.2)
+        with hits_mtx:
+            if len(hits) > 0:
+                max_ts = hits[0]["ts"]
+                max_vol = hits[0]["volume"]
+                max_id = hits[0]["id"]
+                max_pitch = hits[0]["pitch"]
+                while len(hits) > 0 and abs(hits[0]["ts"] - max_ts) < 100:
+                    if hits[0]["volume"] > max_vol:
+                        max_vol = hits[0]["volume"]
+                        max_id = hits[0]["id"]
+                    hits.pop(0)
+                print "Sending ID = %s, volume = %s" % (max_id, max_vol)
+                push_data_to_server(client, max_vol, max_pitch, max_ts, max_id)
+
 def push_data_to_server(client, volume, pitch, timestamp, id):
     jsondata = {
         "Microphone" : {"stream" : str(volume)},
@@ -160,6 +185,10 @@ if __name__ == "__main__":
     sep = threading.Thread(target = separator)
     threads.append(sep)
     sep.start()
+
+    hp = threading.Thread(target = hits_processor)
+    threads.append(hp)
+    hp.start()
 
     while not killswitch:
         pass
