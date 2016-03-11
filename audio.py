@@ -146,6 +146,10 @@ def hits_processor():
                         max_id = hits[0]["id"]
                     hits.pop(0)
                 print "Sending ID = %s, volume = %s" % (max_id, max_vol)
+                if max_id == "0":
+                    print "<" * 40
+                else:
+                    print ">" * 40
                 push_data_to_server(client, max_vol, max_pitch, max_ts, max_id)
 
 def push_data_to_server(client, volume, pitch, timestamp, id):
@@ -156,6 +160,7 @@ def push_data_to_server(client, volume, pitch, timestamp, id):
     }
     client.publishEvent("status", "json", jsondata)
 
+# http://stackoverflow.com/questions/9082431/frequency-analysis-in-python
 def find_pitch(signal, rate):
     signal = np.fromstring(signal, 'Int16');
     crossing = [math.copysign(1.0, s) for s in signal]
