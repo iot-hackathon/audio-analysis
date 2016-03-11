@@ -69,7 +69,7 @@ class Worker(threading.Thread):
                     print("RMS: %d" % rms)
                     print("Pitch: %d" % pitch)
                     timeStamp = int(round(time.time()*1000))
-                    push_data(client, rms, pitch, timeStamp)
+                    push_data(client, rms, pitch, timeStamp, self.myName)
             except IOError as e:
                 print( "Error recording: %s" % (e) )
                 killswitch = True
@@ -112,11 +112,11 @@ def get_client():
     except ibmiotf.ConnectionException as e:
         print(e)
 
-def push_data(client, volume, pitch, timestamp):
+def push_data(client, volume, pitch, timestamp, id):
     jsondata = {
         "Microphone" : {"stream" : str(volume)},
         "Time" : {"timestamp" : timestamp},
-        "Id" :{"microphoneId": 1}
+        "Id" :{"microphoneId": id}
     }
     client.publishEvent("status", "json", jsondata)
 
