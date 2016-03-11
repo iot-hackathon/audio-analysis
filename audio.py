@@ -49,6 +49,7 @@ def read_device_config():
 
 threads = []
 killswitch = False
+mutex = threading.Lock()
 
 class Worker(threading.Thread):
     def __init__(self, name, device):
@@ -60,15 +61,18 @@ class Worker(threading.Thread):
         print("Worker thread for %s online " % self.myName)
         print("Device description: " + str(self.myDev))
         stream = get_stream(self.myDev)
+
         while not killswitch:
             try:
                 data = stream.read(CHUNK)
                 rms  = audioop.rms(data, 2)
                 pitch = find_pitch(data, self.myDev["rate"])
                 if rms > RMS_THRESHOLD and pitch > PITCH_THRESHOLD:
+                    mutex.acquire()
                     print("\nName: %s" % self.myName)
                     print("RMS: %d" % rms)
                     print("Pitch: %d" % pitch)
+                    mutex.release()
                     timeStamp = int(round(time.time()*1000))
                     push_data(client, rms, pitch, timeStamp, self.myName)
             except IOError as e:
