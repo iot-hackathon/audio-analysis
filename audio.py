@@ -10,6 +10,7 @@ import signal
 import sys
 import time
 import threading
+import struct
 
 # IoT service dependencies
 import os
@@ -29,10 +30,11 @@ logger = logging.getLogger(__name__)
 # Config file for the IOT service
 CFG = './config.cfg'
 DEVICE_CFG = './config.json'
-CHUNK = 1024
+CHUNK = 4196
 FORMAT = pyaudio.paInt16
-RMS_THRESHOLD = 5000
-PITCH_THRESHOLD = 900
+RMS_THRESHOLD = 3000
+PITCH_THRESHOLD = [900, 4000]
+
 # INPUT_BLOCK_TIME = 0.05
 # CHUNK = int(RATE * INPUT_BLOCK_TIME)
 
@@ -67,14 +69,18 @@ class Worker(threading.Thread):
                 data = stream.read(CHUNK)
                 rms  = audioop.rms(data, 2)
                 pitch = find_pitch(data, self.myDev["rate"])
-                if rms > RMS_THRESHOLD and pitch > PITCH_THRESHOLD:
-                    mutex.acquire()
-                    print("\nName: %s" % self.myName)
-                    print("RMS: %d" % rms)
-                    print("Pitch: %d" % pitch)
-                    mutex.release()
-                    timeStamp = int(round(time.time()*1000))
-                    push_data(client, rms, pitch, timeStamp, self.myName)
+                timestamp = int(round(time.time()*1000))
+                # pitch2 = max_frequency(data, self.myDev["rate"])
+                if rms > RMS_THRESHOLD \
+                   and pitch > PITCH_THRESHOLD[0]:
+                #    and pitch < PITCH_THRESHOLD[1]:
+                    with mutex:
+                        print("\nName: %s" % self.myName)
+                        print("RMS: %d" % rms)
+                        print("Pitch: %d" % pitch)
+                        print("TS: %s" % (timestamp % 1000))
+                        # print("Pitch2: %d" % pitch2)
+                    push_data_to_server(client, rms, pitch, timestamp, self.myName)
             except IOError as e:
                 print( "Error recording: %s" % (e) )
                 killswitch = True
@@ -117,7 +123,7 @@ def get_client():
     except ibmiotf.ConnectionException as e:
         print(e)
 
-def push_data(client, volume, pitch, timestamp, id):
+def push_data_to_server(client, volume, pitch, timestamp, id):
     jsondata = {
         "Microphone" : {"stream" : str(volume)},
         "Time" : {"timestamp" : timestamp},
@@ -132,6 +138,13 @@ def find_pitch(signal, rate):
     f0=round(index * rate / (2 * np.prod(len(signal))))
     return f0;
 
+def separator():
+    global killswitch
+    while not killswitch:
+        time.sleep(1.0)
+        with mutex:
+            print "-"*20 + time.strftime("%H:%M:%S") + "-"*20
+
 if __name__ == "__main__":
     pa = pyaudio.PyAudio()
 
@@ -143,6 +156,10 @@ if __name__ == "__main__":
     for i, device in enumerate(devices):
         threads.append(Worker(device["name"], device))
         threads[i].start()
+
+    sep = threading.Thread(target = separator)
+    threads.append(sep)
+    sep.start()
 
     while not killswitch:
         pass
