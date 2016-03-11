@@ -72,7 +72,7 @@ class Worker(threading.Thread):
                     push_data(client, rms, pitch, timeStamp)
             except IOError as e:
                 print( "Error recording: %s" % (e) )
-                killswitch = true
+                killswitch = True
 
 def signal_handler(signal, frame):
     print('You pressed Ctrl+C!')
